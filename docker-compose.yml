@@ -1,0 +1,52 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: evidentiranje-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: evidentiranje
+      MYSQL_USER: evident_user
+      MYSQL_PASSWORD: evident_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - evident-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: evidentiranje-backend
+    restart: always
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=evident_user
+      - DB_PASSWORD=evident_pass
+      - DB_NAME=evidentiranje
+      - JWT_SECRET=super_secret_key_change_in_production
+      - JWT_EXPIRATION=3600s
+      - JWT_REFRESH_SECRET=super_refresh_secret_key_change_in_production
+      - JWT_REFRESH_EXPIRATION=7d
+      - QR_CODE_EXPIRATION_MINUTES=2
+      - QR_CODE_BASE_URL=http://localhost:3000/attend?token=
+    ports:
+      - "5001:5001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - evident-net
+
+networks:
+  evident-net:
+
+volumes:
+  mysql_data:
