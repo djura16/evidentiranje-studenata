@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { classesApi, attendanceApi } from '../../services/api';
+import { classesApi, attendanceApi, enrollmentsApi } from '../../services/api';
 import { QRCodeSVG } from 'qrcode.react';
-import { Play, Square, Users, Clock } from 'lucide-react';
+import { Play, Square, Users, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
 import { format } from 'date-fns';
 import { sr } from 'date-fns/locale';
@@ -27,6 +27,15 @@ const ClassDetailPage: React.FC = () => {
     queryKey: ['attendances', id],
     queryFn: () => attendanceApi.getByClass(id!).then((res) => res.data),
     enabled: !!id && !!classSession,
+  });
+
+  const { data: enrollments } = useQuery({
+    queryKey: ['enrollments', classSession?.subjectId],
+    queryFn: () =>
+      enrollmentsApi
+        .getBySubject(classSession!.subjectId)
+        .then((res) => res.data),
+    enabled: !!classSession?.subjectId,
   });
 
   const activateMutation = useMutation({
@@ -219,11 +228,14 @@ const ClassDetailPage: React.FC = () => {
       </div>
 
       <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <div className="flex items-center space-x-2 mb-4">
-          <Users className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-          <h3 className="text-xl font-semibold text-gray-800 dark:text-white">
-            Prisutni studenti ({attendances?.length || 0})
-          </h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <Users className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <h3 className="text-xl font-semibold text-gray-800 dark:text-white">
+              Prisutni studenti ({attendances?.length || 0}
+              {enrollments && ` / ${enrollments.length} upisanih`})
+            </h3>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -231,7 +243,7 @@ const ClassDetailPage: React.FC = () => {
             attendances.map((attendance) => (
               <div
                 key={attendance.id}
-                className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg"
+                className="flex items-center justify-between p-3 border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 rounded-lg"
               >
                 <div>
                   <p className="font-medium text-gray-800 dark:text-white">
@@ -244,6 +256,7 @@ const ClassDetailPage: React.FC = () => {
                     })}
                   </p>
                 </div>
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
             ))
           ) : (
@@ -252,6 +265,42 @@ const ClassDetailPage: React.FC = () => {
             </p>
           )}
         </div>
+
+        {enrollments && enrollments.length > 0 && (
+          <div className="mt-6">
+            <h4 className="font-semibold text-gray-800 dark:text-white mb-3">
+              Upisani studenti koji nisu prisustvovali (
+              {enrollments.length - (attendances?.length || 0)})
+            </h4>
+            <div className="space-y-2">
+              {enrollments
+                .filter(
+                  (enrollment) =>
+                    !attendances?.some(
+                      (attendance) =>
+                        attendance.studentId === enrollment.studentId,
+                    ),
+                )
+                .map((enrollment) => (
+                  <div
+                    key={enrollment.id}
+                    className="flex items-center justify-between p-3 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 rounded-lg"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-800 dark:text-white">
+                        {enrollment.student?.firstName}{' '}
+                        {enrollment.student?.lastName}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {enrollment.student?.email}
+                      </p>
+                    </div>
+                    <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

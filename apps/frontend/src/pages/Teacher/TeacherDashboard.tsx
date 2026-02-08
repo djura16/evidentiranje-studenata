@@ -5,10 +5,11 @@ import { BookOpen, Calendar, ClipboardList } from 'lucide-react';
 import { useAuthContext } from '../../contexts/AuthContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { UserRole } from '@evidentiranje/shared';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 const TeacherDashboard: React.FC = () => {
   const { hasRole } = useAuthContext();
+  const navigate = useNavigate();
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => statisticsApi.getDashboard().then((res) => res.data),
@@ -28,18 +29,21 @@ const TeacherDashboard: React.FC = () => {
       value: data?.subjects?.total || 0,
       icon: BookOpen,
       color: 'bg-blue-500',
+      onClick: () => navigate('/teacher/subjects'),
     },
     {
       title: 'Ukupno časova',
       value: data?.classes?.total || 0,
       icon: Calendar,
       color: 'bg-green-500',
+      onClick: () => navigate('/teacher/classes'),
     },
     {
       title: 'Prisustva',
       value: data?.attendances?.total || 0,
       icon: ClipboardList,
       color: 'bg-purple-500',
+      onClick: () => navigate('/teacher/attendance'),
     },
   ];
 
@@ -56,7 +60,8 @@ const TeacherDashboard: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6"
+            onClick={stat.onClick}
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 cursor-pointer hover:shadow-xl transition-shadow"
           >
             <div className="flex items-center justify-between">
               <div>
@@ -84,7 +89,8 @@ const TeacherDashboard: React.FC = () => {
             {data.subjects.list.map((subject) => (
               <div
                 key={subject.id}
-                className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-md transition-shadow"
+                onClick={() => navigate(`/teacher/subjects`)}
+                className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-md transition-shadow cursor-pointer"
               >
                 <h3 className="font-medium text-gray-800 dark:text-white">
                   {subject.name}

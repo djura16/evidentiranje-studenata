@@ -51,7 +51,8 @@ const Sidebar: React.FC = () => {
 
   const studentLinks = [
     { to: '/student/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/student/subjects', label: 'Predmeti', icon: BookOpen },
+    { to: '/student/enrollments', label: 'Upis na predmete', icon: BookOpen },
+    { to: '/student/subjects', label: 'Moji predmeti', icon: BookOpen },
     { to: '/student/calendar', label: 'Kalendar', icon: Calendar },
     { to: '/student/attendance', label: 'Prisustvo', icon: ClipboardList },
     { to: '/student/scan', label: 'Skeniraj QR', icon: QrCode },

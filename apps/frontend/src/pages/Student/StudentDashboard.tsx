@@ -5,11 +5,12 @@ import { Calendar, ClipboardList, TrendingUp } from 'lucide-react';
 import { useAuthContext } from '../../contexts/AuthContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { UserRole } from '@evidentiranje/shared';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 
 const StudentDashboard: React.FC = () => {
   const { hasRole } = useAuthContext();
+  const navigate = useNavigate();
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => statisticsApi.getDashboard().then((res) => res.data),
@@ -57,7 +58,8 @@ const StudentDashboard: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6"
+          onClick={() => navigate('/student/calendar')}
+          className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 cursor-pointer hover:shadow-xl transition-shadow"
         >
           <div className="flex items-center justify-between">
             <div>
@@ -78,7 +80,8 @@ const StudentDashboard: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6"
+          onClick={() => navigate('/student/attendance')}
+          className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 cursor-pointer hover:shadow-xl transition-shadow"
         >
           <div className="flex items-center justify-between">
             <div>
@@ -99,7 +102,8 @@ const StudentDashboard: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6"
+          onClick={() => navigate('/student/attendance')}
+          className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 cursor-pointer hover:shadow-xl transition-shadow"
         >
           <div className="flex items-center justify-between">
             <div>

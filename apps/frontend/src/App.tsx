@@ -11,8 +11,10 @@ import TeacherDashboard from './pages/Teacher/TeacherDashboard';
 import SubjectsPage from './pages/Teacher/SubjectsPage';
 import ClassesPage from './pages/Teacher/ClassesPage';
 import ClassDetailPage from './pages/Teacher/ClassDetailPage';
+import AttendancePage from './pages/Teacher/AttendancePage';
 import StudentDashboard from './pages/Student/StudentDashboard';
 import StudentSubjects from './pages/Student/StudentSubjects';
+import EnrollmentsPage from './pages/Student/EnrollmentsPage';
 import StudentCalendar from './pages/Student/StudentCalendar';
 import StudentAttendance from './pages/Student/StudentAttendance';
 import QRScannerPage from './pages/Student/QRScannerPage';
@@ -114,6 +116,14 @@ function App() {
             </ProtectedRoute>
           } 
         />
+        <Route 
+          path="teacher/attendance" 
+          element={
+            <ProtectedRoute requiredRole={UserRole.TEACHER}>
+              <AttendancePage />
+            </ProtectedRoute>
+          } 
+        />
         
         {/* Student Routes */}
         <Route 
@@ -129,6 +139,14 @@ function App() {
           element={
             <ProtectedRoute requiredRole={UserRole.STUDENT}>
               <StudentSubjects />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="student/enrollments" 
+          element={
+            <ProtectedRoute requiredRole={UserRole.STUDENT}>
+              <EnrollmentsPage />
             </ProtectedRoute>
           } 
         />

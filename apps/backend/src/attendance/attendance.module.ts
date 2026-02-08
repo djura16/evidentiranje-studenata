@@ -5,9 +5,12 @@ import { AttendanceService } from './attendance.service';
 import { Attendance } from './entities/attendance.entity';
 import { ClassSession } from '../classes/entities/class-session.entity';
 import { User } from '../auth/entities/user.entity';
+import { Enrollment } from '../enrollments/entities/enrollment.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Attendance, ClassSession, User])],
+  imports: [
+    TypeOrmModule.forFeature([Attendance, ClassSession, User, Enrollment]),
+  ],
   controllers: [AttendanceController],
   providers: [AttendanceService],
   exports: [AttendanceService],

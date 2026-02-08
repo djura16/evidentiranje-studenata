@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { User } from '../../auth/entities/user.entity';
 import { ClassSession } from '../../classes/entities/class-session.entity';
+import { Enrollment } from '../../enrollments/entities/enrollment.entity';
 
 @Entity()
 export class Subject {
@@ -29,6 +30,9 @@ export class Subject {
 
   @OneToMany(() => ClassSession, (classSession) => classSession.subject)
   classSessions: ClassSession[];
+
+  @OneToMany(() => Enrollment, (enrollment) => enrollment.subject)
+  enrollments: Enrollment[];
 
   @CreateDateColumn()
   createdAt: Date;

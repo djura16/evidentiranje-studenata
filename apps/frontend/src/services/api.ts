@@ -221,3 +221,24 @@ export const attendanceApi = {
 export const statisticsApi = {
   getDashboard: () => api.get<DashboardStats>('/statistics/dashboard'),
 };
+
+// Enrollments API
+export interface Enrollment {
+  id: string;
+  studentId: string;
+  student?: User;
+  subjectId: string;
+  subject?: Subject;
+  enrolledAt: string;
+}
+
+export const enrollmentsApi = {
+  enroll: (subjectId: string) =>
+    api.post<Enrollment>(`/enrollments/subject/${subjectId}`),
+  unenroll: (subjectId: string) =>
+    api.delete(`/enrollments/subject/${subjectId}`),
+  getMy: () => api.get<Enrollment[]>('/enrollments/my'),
+  getBySubject: (subjectId: string) =>
+    api.get<Enrollment[]>(`/enrollments/subject/${subjectId}`),
+  getAvailableSubjects: () => api.get<Subject[]>('/enrollments/available-subjects'),
+};

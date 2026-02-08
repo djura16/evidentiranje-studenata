@@ -5,10 +5,11 @@ import { Users, BookOpen, Calendar, ClipboardList } from 'lucide-react';
 import { useAuthContext } from '../../contexts/AuthContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { UserRole } from '@evidentiranje/shared';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 const AdminDashboard: React.FC = () => {
   const { hasRole } = useAuthContext();
+  const navigate = useNavigate();
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => statisticsApi.getDashboard().then((res) => res.data),
@@ -28,36 +29,42 @@ const AdminDashboard: React.FC = () => {
       value: data?.users?.total || 0,
       icon: Users,
       color: 'bg-blue-500',
+      onClick: () => navigate('/admin/users'),
     },
     {
       title: 'Profesora',
       value: data?.users?.teachers || 0,
       icon: Users,
       color: 'bg-green-500',
+      onClick: () => navigate('/admin/users'),
     },
     {
       title: 'Studenata',
       value: data?.users?.students || 0,
       icon: Users,
       color: 'bg-purple-500',
+      onClick: () => navigate('/admin/users'),
     },
     {
       title: 'Predmeta',
       value: data?.subjects?.total || 0,
       icon: BookOpen,
       color: 'bg-yellow-500',
+      onClick: () => navigate('/teacher/subjects'),
     },
     {
       title: 'Časova',
       value: data?.classes?.total || 0,
       icon: Calendar,
       color: 'bg-indigo-500',
+      onClick: () => navigate('/teacher/classes'),
     },
     {
       title: 'Prisustava',
       value: data?.attendances?.total || 0,
       icon: ClipboardList,
       color: 'bg-red-500',
+      onClick: () => navigate('/teacher/attendance'),
     },
   ];
 
@@ -74,7 +81,8 @@ const AdminDashboard: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6"
+            onClick={stat.onClick}
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 cursor-pointer hover:shadow-xl transition-shadow"
           >
             <div className="flex items-center justify-between">
               <div>

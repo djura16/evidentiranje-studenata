@@ -1,14 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import { subjectsApi } from '../../services/api';
+import { enrollmentsApi } from '../../services/api';
 import { motion } from 'framer-motion';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, User } from 'lucide-react';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
 const StudentSubjects: React.FC = () => {
-  const { data: subjects, isLoading } = useQuery({
-    queryKey: ['subjects'],
-    queryFn: () => subjectsApi.getAll().then((res) => res.data),
+  const { data: enrollments, isLoading } = useQuery({
+    queryKey: ['my-enrollments'],
+    queryFn: () => enrollmentsApi.getMy().then((res) => res.data),
   });
+
+  const subjects = enrollments?.map((e) => e.subject).filter(Boolean);
 
   if (isLoading) {
     return <LoadingSpinner />;
@@ -17,11 +19,12 @@ const StudentSubjects: React.FC = () => {
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-8">
-        Predmeti
+        Moji predmeti
       </h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {subjects?.map((subject) => (
+      {subjects && subjects.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {subjects.map((subject) => (
           <motion.div
             key={subject.id}
             initial={{ opacity: 0, scale: 0.9 }}
@@ -37,9 +40,12 @@ const StudentSubjects: React.FC = () => {
                   {subject.name}
                 </h3>
                 {subject.teacher && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {subject.teacher.firstName} {subject.teacher.lastName}
-                  </p>
+                  <div className="flex items-center space-x-1 mt-1">
+                    <User className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {subject.teacher.firstName} {subject.teacher.lastName}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -50,8 +56,22 @@ const StudentSubjects: React.FC = () => {
               </p>
             )}
           </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+          <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+            Niste upisani ni na jedan predmet. Idite na{' '}
+            <a
+              href="/student/enrollments"
+              className="text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Upis na predmete
+            </a>{' '}
+            da se upišete.
+          </p>
+        </div>
+      )}
     </div>
   );
 };

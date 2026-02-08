@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
 import { ClassSession } from '../classes/entities/class-session.entity';
 import { User } from '../auth/entities/user.entity';
+import { Enrollment } from '../enrollments/entities/enrollment.entity';
 import { UserRole } from '@evidentiranje/shared';
 
 @Injectable()
@@ -20,6 +21,8 @@ export class AttendanceService {
     private classSessionsRepository: Repository<ClassSession>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Enrollment)
+    private enrollmentsRepository: Repository<Enrollment>,
   ) {}
 
   async scanQrCode(token: string, currentUser: User): Promise<Attendance> {
@@ -42,6 +45,20 @@ export class AttendanceService {
 
     if (classSession.expiresAt && new Date() > classSession.expiresAt) {
       throw new BadRequestException('QR kod je istekao');
+    }
+
+    // Check if student is enrolled in the subject
+    const enrollment = await this.enrollmentsRepository.findOne({
+      where: {
+        studentId: currentUser.id,
+        subjectId: classSession.subjectId,
+      },
+    });
+
+    if (!enrollment) {
+      throw new BadRequestException(
+        'Niste upisani na ovaj predmet. Molimo vas da se prvo upišete.',
+      );
     }
 
     // Check if attendance already exists
