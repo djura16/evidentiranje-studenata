@@ -1,46 +1,20 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { subjectsApi, Subject } from '../../services/api';
 import { motion } from 'framer-motion';
-import { Plus, Edit, Trash2, BookOpen } from 'lucide-react';
-import { useState } from 'react';
-import { useNotification } from '../../contexts/NotificationContext';
-import SubjectModal from '../../components/Modals/SubjectModal';
+import { BookOpen } from 'lucide-react';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
 const SubjectsPage: React.FC = () => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
-  const { showNotification } = useNotification();
-  const queryClient = useQueryClient();
-
   const { data: subjects, isLoading } = useQuery({
     queryKey: ['subjects'],
     queryFn: () => subjectsApi.getAll().then((res) => res.data),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: subjectsApi.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['subjects'] });
-      showNotification('Predmet uspešno obrisan', 'success');
-    },
-    onError: (error: any) => {
-      showNotification(
-        error.response?.data?.message || 'Greška pri brisanju',
-        'error',
-      );
-    },
-  });
-
-  const handleEdit = (subject: Subject) => {
-    setEditingSubject(subject);
-    setIsModalOpen(true);
-  };
-
-  const handleDelete = (id: string) => {
-    if (window.confirm('Da li ste sigurni da želite da obrišete ovaj predmet?')) {
-      deleteMutation.mutate(id);
+  const formatTeachers = (s: Subject) => {
+    if (s.subjectTeachers?.length) {
+      return s.subjectTeachers.map((st) => st.teacher).filter(Boolean).map((t: any) => `${t.firstName} ${t.lastName}`).join(', ');
     }
+    return s.teacher ? `${s.teacher.firstName} ${s.teacher.lastName}` : '—';
   };
 
   if (isLoading) {
@@ -53,16 +27,6 @@ const SubjectsPage: React.FC = () => {
         <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
           Predmeti
         </h1>
-        <button
-          onClick={() => {
-            setEditingSubject(null);
-            setIsModalOpen(true);
-          }}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Dodaj predmet</span>
-        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -82,11 +46,9 @@ const SubjectsPage: React.FC = () => {
                   <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
                     {subject.name}
                   </h3>
-                  {subject.teacher && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {subject.teacher.firstName} {subject.teacher.lastName}
-                    </p>
-                  )}
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {formatTeachers(subject)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -97,35 +59,13 @@ const SubjectsPage: React.FC = () => {
               </p>
             )}
 
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleEdit(subject)}
-                className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-              >
-                <Edit className="w-4 h-4" />
-                <span>Izmeni</span>
-              </button>
-              <button
-                onClick={() => handleDelete(subject.id)}
-                className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Obriši</span>
-              </button>
-            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Predmeti na koje ste dodeljeni. Kreiranje i izmena predmeta obavlja administrator.
+            </p>
           </motion.div>
         ))}
       </div>
 
-      {isModalOpen && (
-        <SubjectModal
-          subject={editingSubject}
-          onClose={() => {
-            setIsModalOpen(false);
-            setEditingSubject(null);
-          }}
-        />
-      )}
     </div>
   );
 };

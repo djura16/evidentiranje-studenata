@@ -8,9 +8,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
 import { ClassSession } from '../classes/entities/class-session.entity';
+import { Subject } from '../subjects/entities/subject.entity';
 import { User } from '../auth/entities/user.entity';
 import { Enrollment } from '../enrollments/entities/enrollment.entity';
 import { UserRole } from '@evidentiranje/shared';
+import { AttendanceGateway } from './attendance.gateway';
 
 @Injectable()
 export class AttendanceService {
@@ -19,10 +21,13 @@ export class AttendanceService {
     private attendanceRepository: Repository<Attendance>,
     @InjectRepository(ClassSession)
     private classSessionsRepository: Repository<ClassSession>,
+    @InjectRepository(Subject)
+    private subjectsRepository: Repository<Subject>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     @InjectRepository(Enrollment)
     private enrollmentsRepository: Repository<Enrollment>,
+    private attendanceGateway: AttendanceGateway,
   ) {}
 
   async scanQrCode(token: string, currentUser: User): Promise<Attendance> {
@@ -44,6 +49,11 @@ export class AttendanceService {
     }
 
     if (classSession.expiresAt && new Date() > classSession.expiresAt) {
+      // Automatska deaktivacija kada student pokuša da skenira istekao QR
+      classSession.isActive = false;
+      classSession.qrCodeToken = null;
+      classSession.expiresAt = null;
+      await this.classSessionsRepository.save(classSession);
       throw new BadRequestException('QR kod je istekao');
     }
 
@@ -78,7 +88,36 @@ export class AttendanceService {
       classSessionId: classSession.id,
     });
 
-    return this.attendanceRepository.save(attendance);
+    try {
+      const saved = await this.attendanceRepository.save(attendance);
+      const loaded = await this.attendanceRepository.findOne({
+        where: { id: saved.id },
+        relations: ['student'],
+      });
+      if (loaded) {
+        this.attendanceGateway.emitNewAttendance(classSession.id, {
+          id: loaded.id,
+          studentId: loaded.studentId,
+          classSessionId: loaded.classSessionId,
+          timestamp: loaded.timestamp.toISOString(),
+          student: loaded.student
+            ? {
+                id: loaded.student.id,
+                firstName: loaded.student.firstName,
+                lastName: loaded.student.lastName,
+                email: loaded.student.email,
+                indexNumber: loaded.student.indexNumber,
+              }
+            : undefined,
+        });
+      }
+      return loaded || saved;
+    } catch (error: any) {
+      if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
+        throw new BadRequestException('Prisustvo je već evidentirano');
+      }
+      throw error;
+    }
   }
 
   async getMyAttendance(currentUser: User): Promise<Attendance[]> {
@@ -99,18 +138,21 @@ export class AttendanceService {
   ): Promise<Attendance[]> {
     const classSession = await this.classSessionsRepository.findOne({
       where: { id: classSessionId },
-      relations: ['subject'],
+      relations: ['subject', 'subject.subjectTeachers'],
     });
 
     if (!classSession) {
       throw new NotFoundException('Čas nije pronađen');
     }
 
-    // Only teacher of the subject or admin can see attendance
-    if (
-      currentUser.role !== UserRole.ADMIN &&
-      classSession.subject.teacherId !== currentUser.id
-    ) {
+    const subject = classSession.subject;
+    const isAssignedTeacher = subject.subjectTeachers?.some(
+      (st) => st.teacherId === currentUser.id,
+    );
+    const isTeacher =
+      subject.teacherId === currentUser.id || isAssignedTeacher;
+
+    if (currentUser.role !== UserRole.ADMIN && !isTeacher) {
       throw new UnauthorizedException(
         'Nemate pravo da vidite prisustvo za ovaj čas',
       );
@@ -146,12 +188,23 @@ export class AttendanceService {
     subjectId: string,
     currentUser: User,
   ): Promise<any> {
-    // Only teachers and admins can see statistics
-    if (
-      currentUser.role !== UserRole.TEACHER &&
-      currentUser.role !== UserRole.ADMIN
-    ) {
-      throw new UnauthorizedException('Nemate pravo da vidite statistiku');
+    if (currentUser.role !== UserRole.ADMIN) {
+      if (currentUser.role !== UserRole.TEACHER) {
+        throw new UnauthorizedException('Nemate pravo da vidite statistiku');
+      }
+      const subject = await this.subjectsRepository
+        .createQueryBuilder('s')
+        .leftJoin('s.subjectTeachers', 'st')
+        .where('s.id = :subjectId', { subjectId })
+        .andWhere('(s.teacherId = :teacherId OR st.teacherId = :teacherId)', {
+          teacherId: currentUser.id,
+        })
+        .getOne();
+      if (!subject) {
+        throw new UnauthorizedException(
+          'Nemate pravo da vidite statistiku za ovaj predmet',
+        );
+      }
     }
 
     const classSessions = await this.classSessionsRepository.find({
@@ -180,23 +233,58 @@ export class AttendanceService {
       studentStats.get(studentId).count++;
     }
 
-    const statistics = Array.from(studentStats.values()).map((stat) => ({
-      student: {
-        id: stat.student.id,
-        firstName: stat.student.firstName,
-        lastName: stat.student.lastName,
-        email: stat.student.email,
+    // Za svakog studenta - lista datuma kada je prisustvovao
+    const studentAttendanceDates = new Map<
+      string,
+      { student: User; classDates: Date[] }
+    >();
+    for (const att of attendances) {
+      const studentId = att.studentId;
+      if (!studentAttendanceDates.has(studentId)) {
+        studentAttendanceDates.set(studentId, {
+          student: att.student,
+          classDates: [],
+        });
+      }
+      const sessionStart = new Date(att.classSession.startTime);
+      studentAttendanceDates.get(studentId)!.classDates.push(sessionStart);
+    }
+
+    const statistics = Array.from(studentStats.entries()).map(
+      ([studentId, stat]) => {
+        const datesInfo = studentAttendanceDates.get(studentId);
+        return {
+          student: {
+            id: stat.student.id,
+            firstName: stat.student.firstName,
+            lastName: stat.student.lastName,
+            email: stat.student.email,
+            indexNumber: stat.student.indexNumber,
+          },
+          attendedClasses: stat.count,
+          totalClasses,
+          attendancePercentage:
+            totalClasses > 0
+              ? Math.round((stat.count / totalClasses) * 100)
+              : 0,
+          attendedDates: datesInfo
+            ? datesInfo.classDates
+                .sort((a, b) => a.getTime() - b.getTime())
+                .map((d) => d.toISOString().split('T')[0])
+            : [],
+        };
       },
-      attendedClasses: stat.count,
-      totalClasses,
-      attendancePercentage:
-        totalClasses > 0 ? Math.round((stat.count / totalClasses) * 100) : 0,
-    }));
+    );
+
+    const allClassDates = classSessions
+      .map((cs) => new Date(cs.startTime).toISOString().split('T')[0])
+      .sort();
 
     return {
       subjectId,
       totalClasses,
       statistics,
+      classDates: allClassDates,
     };
   }
 }

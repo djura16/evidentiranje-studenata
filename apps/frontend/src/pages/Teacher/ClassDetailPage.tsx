@@ -2,12 +2,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { classesApi, attendanceApi, enrollmentsApi } from '../../services/api';
 import { QRCodeSVG } from 'qrcode.react';
-import { Play, Square, Users, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Play, Square, Users, Clock, CheckCircle, XCircle, Maximize2 } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
 import { format } from 'date-fns';
 import { sr } from 'date-fns/locale';
 import LoadingSpinner from '../../components/LoadingSpinner';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useAttendanceSocket, type LiveAttendance } from '../../hooks/useAttendanceSocket';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const ClassDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +18,7 @@ const ClassDetailPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [expirationMinutes, setExpirationMinutes] = useState(5);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const hasInvalidatedOnExpiry = useRef(false);
 
   const { data: classSession, isLoading } = useQuery({
     queryKey: ['class', id],
@@ -27,6 +30,12 @@ const ClassDetailPage: React.FC = () => {
     queryKey: ['attendances', id],
     queryFn: () => attendanceApi.getByClass(id!).then((res) => res.data),
     enabled: !!id && !!classSession,
+  });
+
+  const liveAttendances = useAttendanceSocket({
+    classSessionId: id,
+    initialAttendances: attendances ?? [],
+    enabled: !!id && !!classSession && !!classSession.isActive,
   });
 
   const { data: enrollments } = useQuery({
@@ -57,17 +66,19 @@ const ClassDetailPage: React.FC = () => {
   useEffect(() => {
     if (!classSession?.expiresAt || !classSession.isActive) {
       setTimeRemaining(null);
+      hasInvalidatedOnExpiry.current = false;
       return;
     }
 
     const updateTimer = () => {
       const now = new Date().getTime();
-      const expires = new Date(classSession.expiresAt).getTime();
+      const expires = new Date(classSession!.expiresAt!).getTime();
       const remaining = Math.max(0, Math.floor((expires - now) / 1000));
       setTimeRemaining(remaining);
 
-      // Automatski osveži podatke kada istekne
-      if (remaining === 0) {
+      // Jednom osveži podatke kada istekne (BE automatski deaktivira čas)
+      if (remaining === 0 && !hasInvalidatedOnExpiry.current) {
+        hasInvalidatedOnExpiry.current = true;
         queryClient.invalidateQueries({ queryKey: ['class', id] });
       }
     };
@@ -92,6 +103,34 @@ const ClassDetailPage: React.FC = () => {
     },
   });
 
+  // Može aktivirati samo u vremenskom okviru: 15 min pre početka do kraja časa
+  const getActivationStatus = () => {
+    if (!classSession?.startTime || !classSession?.endTime) return null;
+    const now = new Date();
+    const startTime = new Date(classSession.startTime);
+    const endTime = new Date(classSession.endTime);
+    const windowStart = new Date(startTime);
+    windowStart.setMinutes(windowStart.getMinutes() - 15);
+
+    if (now < windowStart) {
+      return {
+        canActivate: false,
+        message: `Ne možete aktivirati čas - još nije vreme. Možete aktivirati najranije 15 minuta pre početka (${format(windowStart, 'HH:mm', { locale: sr })}).`,
+      };
+    }
+    if (now > endTime) {
+      return {
+        canActivate: false,
+        message: 'Ne možete aktivirati čas - vreme časa je već prošlo.',
+      };
+    }
+    return { canActivate: true, message: null };
+  };
+
+  const activationStatus = getActivationStatus();
+  const isClassEnded =
+    classSession?.endTime && new Date() > new Date(classSession.endTime);
+
   if (isLoading) {
     return <LoadingSpinner />;
   }
@@ -102,7 +141,7 @@ const ClassDetailPage: React.FC = () => {
 
   const qrCodeUrl = classSession.qrCodeUrl || 
     (classSession.qrCodeToken 
-      ? `${import.meta.env.VITE_QR_BASE_URL || 'http://localhost:3000/attend?token='}${classSession.qrCodeToken}`
+      ? `${import.meta.env.VITE_QR_BASE_URL || `${window.location.origin}/attend?token=`}${classSession.qrCodeToken}`
       : null);
 
   return (
@@ -147,8 +186,22 @@ const ClassDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {!classSession.isActive ? (
+          {isClassEnded ? (
+            <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Čas je završen. Ispod možete videti listu studenata koji su
+                evidentirali prisustvo.
+              </p>
+            </div>
+          ) : !classSession.isActive ? (
             <div className="space-y-4">
+              {activationStatus && !activationStatus.canActivate && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    {activationStatus.message}
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Trajanje QR koda (minuti)
@@ -167,8 +220,8 @@ const ClassDetailPage: React.FC = () => {
               </div>
               <button
                 onClick={() => activateMutation.mutate(expirationMinutes)}
-                disabled={activateMutation.isPending}
-                className="w-full flex items-center justify-center space-x-2 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                disabled={activateMutation.isPending || !!(activationStatus && !activationStatus.canActivate)}
+                className="w-full flex items-center justify-center space-x-2 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Play className="w-5 h-5" />
                 <span>Aktiviraj čas</span>
@@ -186,11 +239,22 @@ const ClassDetailPage: React.FC = () => {
           )}
         </div>
 
-        {classSession.isActive && qrCodeUrl && (
+        {classSession.isActive && qrCodeUrl && (timeRemaining === null || timeRemaining > 0) && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-            <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">
-              QR Kod za prisustvo
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-gray-800 dark:text-white">
+                QR Kod za prisustvo
+              </h3>
+              <a
+                href={`/teacher/classes/${id}/qr-display`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+              >
+                <Maximize2 className="w-4 h-4" />
+                Prikaži preko celog ekrana
+              </a>
+            </div>
             <div className="flex flex-col items-center space-y-4">
               <div className="p-4 bg-white rounded-lg">
                 <QRCodeSVG value={qrCodeUrl} size={256} />
@@ -232,33 +296,59 @@ const ClassDetailPage: React.FC = () => {
           <div className="flex items-center space-x-2">
             <Users className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             <h3 className="text-xl font-semibold text-gray-800 dark:text-white">
-              Prisutni studenti ({attendances?.length || 0}
+              Prisutni studenti ({liveAttendances.length}
               {enrollments && ` / ${enrollments.length} upisanih`})
             </h3>
           </div>
         </div>
 
         <div className="space-y-2">
-          {attendances && attendances.length > 0 ? (
-            attendances.map((attendance) => (
-              <div
-                key={attendance.id}
-                className="flex items-center justify-between p-3 border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 rounded-lg"
-              >
-                <div>
-                  <p className="font-medium text-gray-800 dark:text-white">
-                    {attendance.student?.firstName}{' '}
-                    {attendance.student?.lastName}
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {format(new Date(attendance.timestamp), 'dd.MM.yyyy HH:mm', {
-                      locale: sr,
-                    })}
-                  </p>
-                </div>
-                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-              </div>
-            ))
+          {liveAttendances.length > 0 ? (
+            <AnimatePresence mode="popLayout">
+              {liveAttendances.map((attendance: LiveAttendance) => (
+                <motion.div
+                  key={attendance.id}
+                  initial={attendance._isNew ? { opacity: 0, scale: 0.9, y: -10 } : undefined}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{
+                    type: 'spring',
+                    stiffness: 400,
+                    damping: 25,
+                  }}
+                  className={`flex items-center justify-between p-3 border rounded-lg transition-all duration-500 ${
+                    attendance._isNew
+                      ? 'border-green-400 dark:border-green-500 bg-green-100 dark:bg-green-900/40 ring-2 ring-green-300 dark:ring-green-600'
+                      : 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+                  }`}
+                >
+                  <div>
+                    <p className="font-medium text-gray-800 dark:text-white">
+                      {attendance.student?.firstName}{' '}
+                      {attendance.student?.lastName}
+                      {attendance.student?.indexNumber && (
+                        <span className="text-gray-500 dark:text-gray-400 font-normal ml-1">
+                          ({attendance.student.indexNumber})
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {format(new Date(attendance.timestamp), 'dd.MM.yyyy HH:mm', {
+                        locale: sr,
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {attendance._isNew && (
+                      <span className="text-xs font-medium text-green-600 dark:text-green-400 animate-pulse">
+                        Novo!
+                      </span>
+                    )}
+                    <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           ) : (
             <p className="text-gray-500 dark:text-gray-400 text-center py-4">
               Nema evidentiranih prisustava
@@ -270,13 +360,13 @@ const ClassDetailPage: React.FC = () => {
           <div className="mt-6">
             <h4 className="font-semibold text-gray-800 dark:text-white mb-3">
               Upisani studenti koji nisu prisustvovali (
-              {enrollments.length - (attendances?.length || 0)})
+              {enrollments.length - liveAttendances.length})
             </h4>
             <div className="space-y-2">
               {enrollments
                 .filter(
                   (enrollment) =>
-                    !attendances?.some(
+                    !liveAttendances.some(
                       (attendance) =>
                         attendance.studentId === enrollment.studentId,
                     ),
@@ -290,6 +380,11 @@ const ClassDetailPage: React.FC = () => {
                       <p className="font-medium text-gray-800 dark:text-white">
                         {enrollment.student?.firstName}{' '}
                         {enrollment.student?.lastName}
+                        {enrollment.student?.indexNumber && (
+                          <span className="text-gray-500 dark:text-gray-400 font-normal ml-1">
+                            ({enrollment.student.indexNumber})
+                          </span>
+                        )}
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         {enrollment.student?.email}

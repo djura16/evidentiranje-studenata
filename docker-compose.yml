@@ -19,6 +19,23 @@ services:
       timeout: 20s
       retries: 10
 
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: evidentiranje-phpmyadmin
+    restart: always
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: evident_user
+      PMA_PASSWORD: evident_pass
+    ports:
+      - "8080:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - evident-net
+
   backend:
     build:
       context: .

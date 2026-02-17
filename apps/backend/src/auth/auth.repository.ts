@@ -16,15 +16,26 @@ export class AuthRepository extends Repository<User> {
   }
 
   async createUser(createUserDto: CreateUserDto): Promise<User> {
-    const { email, password, firstName, lastName, role } = createUserDto;
+    const { email, password, firstName, lastName, indexNumber, enrollmentYear: dtoYear, role } = createUserDto;
 
     const salt = await bcrypt.genSalt();
     const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Parse "001/2024" into indexNumber and enrollmentYear (if enrollmentYear not provided)
+    let enrollmentYear: number | undefined = dtoYear;
+    let finalIndexNumber = indexNumber;
+    if (indexNumber && indexNumber.includes('/') && enrollmentYear == null) {
+      const [num, year] = indexNumber.split('/');
+      finalIndexNumber = num;
+      enrollmentYear = year ? parseInt(year, 10) : undefined;
+    }
 
     const user = this.create({
       email,
       firstName,
       lastName,
+      indexNumber: finalIndexNumber,
+      enrollmentYear,
       password: hashedPassword,
       role: role || UserRole.STUDENT,
     });

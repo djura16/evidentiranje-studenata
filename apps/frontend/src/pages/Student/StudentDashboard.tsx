@@ -9,7 +9,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 
 const StudentDashboard: React.FC = () => {
-  const { hasRole } = useAuthContext();
+  const { hasRole, user } = useAuthContext();
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -26,14 +26,7 @@ const StudentDashboard: React.FC = () => {
 
   const quickActions = [
     {
-      title: 'Skeniraj QR kod',
-      description: 'Evidentiraj prisustvo',
-      icon: ClipboardList,
-      link: '/student/scan',
-      color: 'bg-blue-500',
-    },
-    {
-      title: 'Kalendar časova',
+      title: 'Raspored časova',
       description: 'Pregled svih časova',
       icon: Calendar,
       link: '/student/calendar',
@@ -51,8 +44,11 @@ const StudentDashboard: React.FC = () => {
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-8">
-        Student Dashboard
+        Zdravo, {user?.firstName} {user?.lastName}!
       </h1>
+      <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+        Broj indeksa: {user?.indexNumber}
+      </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <motion.div

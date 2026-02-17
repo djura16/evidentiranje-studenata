@@ -15,6 +15,11 @@ const registerSchema = Yup.object().shape({
     .required('Lozinka je obavezna'),
   firstName: Yup.string().required('Ime je obavezno'),
   lastName: Yup.string().required('Prezime je obavezno'),
+  indexNumber: Yup.string().test(
+    'indexFormat',
+    'Format: broj/godina (npr. 001/2024)',
+    (v) => !v || /^\d+\/\d{4}$/.test(v),
+  ),
   role: Yup.string().oneOf(
     [UserRole.STUDENT, UserRole.TEACHER],
     'Neispravna uloga',
@@ -52,6 +57,7 @@ const RegisterPage: React.FC = () => {
               password: '',
               firstName: '',
               lastName: '',
+              indexNumber: '',
               role: UserRole.STUDENT,
             }}
             validationSchema={registerSchema}
@@ -67,7 +73,7 @@ const RegisterPage: React.FC = () => {
               });
             }}
           >
-            {({ isSubmitting }) => (
+            {({ isSubmitting, values }) => (
               <Form className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -117,6 +123,25 @@ const RegisterPage: React.FC = () => {
                     className="text-red-500 text-sm mt-1"
                   />
                 </div>
+
+                {values.role === UserRole.STUDENT && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Broj indeksa (opcionalno)
+                    </label>
+                    <Field
+                      type="text"
+                      name="indexNumber"
+                      placeholder="npr. 001/2024"
+                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                    />
+                    <ErrorMessage
+                      name="indexNumber"
+                      component="div"
+                      className="text-red-500 text-sm mt-1"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

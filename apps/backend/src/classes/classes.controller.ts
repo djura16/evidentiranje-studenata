@@ -31,10 +31,30 @@ export class ClassesController {
     return this.classesService.create(createClassSessionDto, user);
   }
 
+  @Get('count-held')
+  @ApiOperation({ summary: 'Broj održanih časova (za paginaciju)' })
+  countHeld(
+    @GetUser() user: User,
+    @Query('subjectId') subjectId?: string,
+  ) {
+    return this.classesService.countHeld(user, subjectId);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Pregled svih časova' })
-  findAll(@GetUser() user: User, @Query('subjectId') subjectId?: string) {
-    return this.classesService.findAll(user, subjectId);
+  findAll(
+    @GetUser() user: User,
+    @Query('subjectId') subjectId?: string,
+    @Query('heldOnly') heldOnly?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.classesService.findAll(user, {
+      subjectId,
+      heldOnly: heldOnly === 'true',
+      limit: limit ? parseInt(limit, 10) : undefined,
+      offset: offset ? parseInt(offset, 10) : undefined,
+    });
   }
 
   @Get(':id')

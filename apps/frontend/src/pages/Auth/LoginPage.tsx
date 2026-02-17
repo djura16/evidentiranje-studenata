@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { useLogin } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
+import { getAndClearRedirectAfterLogin, POST_LOGIN_REDIRECT_KEY } from '../../utils/authStorage';
+import { useState, useEffect } from 'react';
 
 const loginSchema = Yup.object().shape({
   email: Yup.string()
@@ -17,6 +19,11 @@ const loginSchema = Yup.object().shape({
 const LoginPage: React.FC = () => {
   const loginMutation = useLogin();
   const navigate = useNavigate();
+  const [fromQrScan, setFromQrScan] = useState(false);
+
+  useEffect(() => {
+    setFromQrScan(!!sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY));
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 px-4">
@@ -35,7 +42,9 @@ const LoginPage: React.FC = () => {
               Dobrodošli
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Prijavite se na svoj nalog
+              {fromQrScan
+                ? 'Prijavite se da biste evidentirali prisustvo putem QR koda'
+                : 'Prijavite se na svoj nalog'}
             </p>
           </div>
 
@@ -45,7 +54,8 @@ const LoginPage: React.FC = () => {
             onSubmit={(values, { setSubmitting }) => {
               loginMutation.mutate(values, {
                 onSuccess: () => {
-                  navigate('/dashboard');
+                  const redirectTo = getAndClearRedirectAfterLogin();
+                  navigate(redirectTo || '/dashboard', { replace: true });
                   setSubmitting(false);
                 },
                 onError: () => {

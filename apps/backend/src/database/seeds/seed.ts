@@ -42,6 +42,8 @@ export async function seedDatabase(dataSource: DataSource) {
     email: 'student@example.com',
     firstName: 'Jovan',
     lastName: 'Student',
+    indexNumber: '001',
+    enrollmentYear: 2020,
     password: hashedPassword,
     role: UserRole.STUDENT,
   });

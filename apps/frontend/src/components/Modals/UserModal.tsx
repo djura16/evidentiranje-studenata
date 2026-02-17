@@ -18,6 +18,15 @@ const userSchema = Yup.object().shape({
     .required('Email je obavezan'),
   firstName: Yup.string().required('Ime je obavezno'),
   lastName: Yup.string().required('Prezime je obavezno'),
+  indexNumber: Yup.string().test(
+    'indexFormat',
+    'Samo cifre (npr. 001)',
+    (v) => !v || /^\d+$/.test(v),
+  ),
+  enrollmentYear: Yup.number()
+    .nullable()
+    .min(2000, 'Godina 2000-2050')
+    .max(2050, 'Godina 2000-2050'),
   role: Yup.string()
     .oneOf([UserRole.ADMIN, UserRole.TEACHER, UserRole.STUDENT])
     .required('Uloga je obavezna'),
@@ -65,6 +74,14 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose }) => {
 
   const isEditing = !!user;
 
+  const getAcademicYearOptions = () => {
+    const startYear = new Date().getFullYear();
+    return Array.from({ length: 10 }, (_, i) => {
+      const y = startYear - i;
+      return y;
+    });
+  };
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -98,23 +115,47 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose }) => {
               email: user?.email || '',
               firstName: user?.firstName || '',
               lastName: user?.lastName || '',
+              indexNumber: (() => {
+                const inum = (user as any)?.indexNumber;
+                if (!inum) return '';
+                if (inum.includes('/')) return inum.split('/')[0];
+                return inum;
+              })(),
+              enrollmentYear: (() => {
+                const u = user as any;
+                if (u?.enrollmentYear) return u.enrollmentYear;
+                const inum = u?.indexNumber;
+                if (inum?.includes('/')) {
+                  const y = parseInt(inum.split('/')[1], 10);
+                  return isNaN(y) ? '' : y;
+                }
+                return '';
+              })(),
               role: user?.role || UserRole.STUDENT,
               password: '',
             }}
             validationSchema={userSchema}
             onSubmit={(values, { setSubmitting }) => {
               const { password, ...rest } = values;
-              const data = password ? values : rest;
+              const data: any = password ? { ...values } : { ...rest };
+              if (data.enrollmentYear === '' || data.enrollmentYear == null) {
+                delete data.enrollmentYear;
+              } else {
+                data.enrollmentYear = Number(data.enrollmentYear);
+              }
+              if (!data.indexNumber && data.role !== UserRole.STUDENT) {
+                delete data.indexNumber;
+              }
 
               if (isEditing) {
                 updateMutation.mutate({ id: user.id, data });
               } else {
-                createMutation.mutate(data as any);
+                createMutation.mutate(data);
               }
               setSubmitting(false);
             }}
           >
-            {({ isSubmitting }) => (
+            {({ isSubmitting, values }) => (
               <Form className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -184,6 +225,47 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose }) => {
                     className="text-red-500 text-sm mt-1"
                   />
                 </div>
+
+                {values.role === UserRole.STUDENT && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Broj indeksa
+                      </label>
+                      <Field
+                        type="text"
+                        name="indexNumber"
+                        placeholder="npr. 001"
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                      />
+                      <ErrorMessage
+                        name="indexNumber"
+                        component="div"
+                        className="text-red-500 text-sm mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Godina upisa
+                      </label>
+                      <Field
+                        as="select"
+                        name="enrollmentYear"
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                      >
+                        <option value="">—</option>
+                        {getAcademicYearOptions().map((y) => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </Field>
+                      <ErrorMessage
+                        name="enrollmentYear"
+                        component="div"
+                        className="text-red-500 text-sm mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

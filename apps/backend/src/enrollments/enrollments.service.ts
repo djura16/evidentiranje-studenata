@@ -71,7 +71,7 @@ export class EnrollmentsService {
   async getStudentEnrollments(studentId: string): Promise<Enrollment[]> {
     return this.enrollmentsRepository.find({
       where: { studentId },
-      relations: ['subject', 'subject.teacher'],
+      relations: ['subject', 'subject.teacher', 'subject.subjectTeachers', 'subject.subjectTeachers.teacher'],
     });
   }
 
@@ -81,17 +81,19 @@ export class EnrollmentsService {
   ): Promise<Enrollment[]> {
     const subject = await this.subjectsRepository.findOne({
       where: { id: subjectId },
+      relations: ['subjectTeachers'],
     });
 
     if (!subject) {
       throw new NotFoundException('Predmet nije pronađen');
     }
 
-    // Only teacher of the subject or admin can see enrollments
-    if (
-      currentUser.role !== UserRole.ADMIN &&
-      subject.teacherId !== currentUser.id
-    ) {
+    const isAssignedTeacher = subject.subjectTeachers?.some(
+      (st) => st.teacherId === currentUser.id,
+    );
+    const isTeacher = subject.teacherId === currentUser.id || isAssignedTeacher;
+
+    if (currentUser.role !== UserRole.ADMIN && !isTeacher) {
       throw new UnauthorizedException(
         'Nemate pravo da vidite upisane studente',
       );
@@ -103,10 +105,41 @@ export class EnrollmentsService {
     });
   }
 
-  async getAllAvailableSubjects(): Promise<Subject[]> {
-    return this.subjectsRepository.find({
-      relations: ['teacher'],
-      order: { name: 'ASC' },
+  async bulkEnrollByYear(subjectId: string, enrollmentYear: number): Promise<{ enrolled: number }> {
+    const subject = await this.subjectsRepository.findOne({ where: { id: subjectId } });
+    if (!subject) throw new NotFoundException('Predmet nije pronađen');
+
+    const students = await this.usersRepository.find({
+      where: { role: UserRole.STUDENT, enrollmentYear },
     });
+
+    let enrolled = 0;
+    for (const student of students) {
+      const existing = await this.enrollmentsRepository.findOne({
+        where: { studentId: student.id, subjectId },
+      });
+      if (!existing) {
+        const e = this.enrollmentsRepository.create({ studentId: student.id, subjectId });
+        await this.enrollmentsRepository.save(e);
+        enrolled++;
+      }
+    }
+    return { enrolled };
+  }
+
+  async bulkUnenrollByYear(subjectId: string, enrollmentYear: number): Promise<{ unenrolled: number }> {
+    const subject = await this.subjectsRepository.findOne({ where: { id: subjectId } });
+    if (!subject) throw new NotFoundException('Predmet nije pronađen');
+
+    const enrollments = await this.enrollmentsRepository.find({
+      where: { subjectId },
+      relations: ['student'],
+    });
+
+    const toRemove = enrollments.filter(
+      (e) => e.student?.role === UserRole.STUDENT && e.student.enrollmentYear === enrollmentYear,
+    );
+    await this.enrollmentsRepository.remove(toRemove);
+    return { unenrolled: toRemove.length };
   }
 }

@@ -5,7 +5,6 @@ import {
   Users,
   BookOpen,
   Calendar,
-  QrCode,
   ClipboardList,
   LogOut,
   Menu,
@@ -41,21 +40,23 @@ const Sidebar: React.FC = () => {
   const adminLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/admin/users', label: 'Korisnici', icon: Users },
+    { to: '/admin/subjects', label: 'Predmeti', icon: BookOpen },
   ];
 
   const teacherLinks = [
     { to: '/teacher/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/teacher/subjects', label: 'Predmeti', icon: BookOpen },
     { to: '/teacher/classes', label: 'Časovi', icon: Calendar },
+    { to: '/teacher/calendar', label: 'Raspored časova', icon: Calendar },
+    { to: '/teacher/attendance', label: 'Prisustva', icon: ClipboardList },
   ];
 
   const studentLinks = [
     { to: '/student/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/student/enrollments', label: 'Upis na predmete', icon: BookOpen },
+    { to: '/student/enrollments', label: 'Moji upisani predmeti', icon: BookOpen },
     { to: '/student/subjects', label: 'Moji predmeti', icon: BookOpen },
-    { to: '/student/calendar', label: 'Kalendar', icon: Calendar },
+    { to: '/student/calendar', label: 'Raspored časova', icon: Calendar },
     { to: '/student/attendance', label: 'Prisustvo', icon: ClipboardList },
-    { to: '/student/scan', label: 'Skeniraj QR', icon: QrCode },
   ];
 
   const getLinks = () => {

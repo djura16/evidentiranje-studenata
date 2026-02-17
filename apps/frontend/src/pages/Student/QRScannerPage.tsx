@@ -6,6 +6,8 @@ import { motion } from 'framer-motion';
 import { QrCode, CheckCircle, XCircle } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
 
+const scannedTokens = new Set<string>();
+
 const QRScannerPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -16,6 +18,7 @@ const QRScannerPage: React.FC = () => {
   const scanMutation = useMutation({
     mutationFn: attendanceApi.scan,
     onSuccess: () => {
+      if (token) scannedTokens.delete(token);
       setScanned(true);
       showNotification('Prisustvo uspešno evidentirano!', 'success');
       setTimeout(() => {
@@ -23,6 +26,7 @@ const QRScannerPage: React.FC = () => {
       }, 2000);
     },
     onError: (error: any) => {
+      if (token) scannedTokens.delete(token);
       showNotification(
         error.response?.data?.message || 'Greška pri skeniranju',
         'error',
@@ -31,9 +35,11 @@ const QRScannerPage: React.FC = () => {
   });
 
   useEffect(() => {
-    if (token && !scanned) {
-      scanMutation.mutate(token);
-    }
+    if (!token || scanned || scanMutation.isError) return;
+    if (scannedTokens.has(token)) return;
+
+    scannedTokens.add(token);
+    scanMutation.mutate(token);
   }, [token]);
 
   if (!token) {
@@ -83,6 +89,33 @@ const QRScannerPage: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400">
             Vaše prisustvo je evidentirano
           </p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (scanMutation.isError) {
+    const errorMessage =
+      scanMutation.error?.response?.data?.message ||
+      'QR kod više nije validan ili je istekao.';
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center"
+        >
+          <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
+            QR kod više nije validan
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">{errorMessage}</p>
+          <button
+            onClick={() => navigate('/student/dashboard')}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Nazad na dashboard
+          </button>
         </motion.div>
       </div>
     );
