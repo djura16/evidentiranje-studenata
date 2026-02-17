@@ -1,13 +1,19 @@
 import {
   IsEmail,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
+  Min,
+  Max,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { UserRole } from '@evidentiranje/shared';
 
 export class CreateUserDto {
@@ -34,6 +40,24 @@ export class CreateUserDto {
   @IsNotEmpty()
   @MaxLength(50)
   lastName: string;
+
+  @ApiProperty({ example: '001', required: false, description: 'Broj indeksa (samo broj)' })
+  @ValidateIf((o) => o.indexNumber != null && o.indexNumber !== '')
+  @IsString()
+  @Matches(/^\d+$/, {
+    message: 'Broj indeksa mora sadržati samo cifre (npr. 001)',
+  })
+  @IsOptional()
+  indexNumber?: string;
+
+  @ApiProperty({ example: 2024, required: false, description: 'Godina upisa' })
+  @ValidateIf((o) => o.enrollmentYear != null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  @Max(2050)
+  @IsOptional()
+  enrollmentYear?: number;
 
   @ApiProperty({ enum: UserRole, required: false })
   @IsEnum(UserRole)

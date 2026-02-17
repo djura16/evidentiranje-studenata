@@ -66,31 +66,53 @@ export interface RegisterRequest {
   password: string;
   firstName: string;
   lastName: string;
+  indexNumber?: string;
   role?: UserRole;
 }
 
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
-  user: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: UserRole;
-    avatar?: string;
-  };
+    user: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      indexNumber?: string;
+      role: UserRole;
+      avatar?: string;
+    };
 }
 
 // User type is imported from @evidentiranje/shared
 export type { User };
 
+export interface SubjectSchedule {
+  id?: string;
+  dayOfWeek: number;
+  startTime: string;
+  durationMinutes: number;
+  repeatsWeekly?: boolean;
+}
+
+export interface SubjectTeacher {
+  id: string;
+  teacherId: string;
+  teacher?: User;
+}
+
 export interface Subject {
   id: string;
   name: string;
   description?: string;
-  teacherId: string;
+  teacherId?: string;
   teacher?: User;
+  subjectTeachers?: SubjectTeacher[];
+  semesterStartDate?: string;
+  semesterEndDate?: string;
+  semesterType?: 'winter' | 'summer';
+  academicYearStart?: number;
+  schedules?: SubjectSchedule[];
   createdAt: string;
   updatedAt: string;
 }
@@ -163,19 +185,44 @@ export const usersApi = {
 export const subjectsApi = {
   getAll: () => api.get<Subject[]>('/subjects'),
   getById: (id: string) => api.get<Subject>(`/subjects/${id}`),
-  create: (data: { name: string; description?: string; teacherId?: string }) =>
-    api.post<Subject>('/subjects', data),
-  update: (id: string, data: Partial<Subject>) =>
+  create: (data: {
+    name: string;
+    description?: string;
+    teacherId?: string;
+    teacherIds?: string[];
+    semesterType?: 'winter' | 'summer';
+    academicYearStart?: number;
+    semesterStartDate?: string;
+    semesterEndDate?: string;
+    schedules?: SubjectSchedule[];
+  }) => api.post<Subject>('/subjects', data),
+  update: (id: string, data: Partial<Subject> & { teacherIds?: string[] }) =>
     api.patch<Subject>(`/subjects/${id}`, data),
   delete: (id: string) => api.delete(`/subjects/${id}`),
 };
 
 // Classes API
+export interface ClassesQueryParams {
+  subjectId?: string;
+  heldOnly?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
 export const classesApi = {
-  getAll: (subjectId?: string) =>
-    api.get<ClassSession[]>(
-      `/classes${subjectId ? `?subjectId=${subjectId}` : ''}`,
-    ),
+  countHeld: (subjectId?: string) =>
+    api.get<number>(
+      `/classes/count-held${subjectId ? `?subjectId=${subjectId}` : ''}`,
+    ).then((res) => res.data),
+  getAll: (params?: ClassesQueryParams) => {
+    const search = new URLSearchParams();
+    if (params?.subjectId) search.set('subjectId', params.subjectId);
+    if (params?.heldOnly) search.set('heldOnly', 'true');
+    if (params?.limit != null) search.set('limit', String(params.limit));
+    if (params?.offset != null) search.set('offset', String(params.offset));
+    const qs = search.toString();
+    return api.get<ClassSession[]>(`/classes${qs ? `?${qs}` : ''}`);
+  },
   getById: (id: string) => api.get<ClassSession>(`/classes/${id}`),
   create: (data: {
     subjectId: string;
@@ -196,7 +243,7 @@ export const classesApi = {
 // Attendance API
 export const attendanceApi = {
   scan: (token: string) =>
-    api.post<Attendance>('/attendance/scan', null, {
+    api.post<Attendance>('/attendance/scan', {}, {
       params: { token },
     }),
   getMy: () => api.get<Attendance[]>('/attendance/my'),
@@ -208,11 +255,13 @@ export const attendanceApi = {
     api.get<{
       subjectId: string;
       totalClasses: number;
+      classDates: string[];
       statistics: Array<{
         student: User;
         attendedClasses: number;
         totalClasses: number;
         attendancePercentage: number;
+        attendedDates: string[];
       }>;
     }>(`/attendance/statistics/${subjectId}`),
 };
@@ -233,12 +282,20 @@ export interface Enrollment {
 }
 
 export const enrollmentsApi = {
-  enroll: (subjectId: string) =>
-    api.post<Enrollment>(`/enrollments/subject/${subjectId}`),
-  unenroll: (subjectId: string) =>
-    api.delete(`/enrollments/subject/${subjectId}`),
   getMy: () => api.get<Enrollment[]>('/enrollments/my'),
   getBySubject: (subjectId: string) =>
     api.get<Enrollment[]>(`/enrollments/subject/${subjectId}`),
-  getAvailableSubjects: () => api.get<Subject[]>('/enrollments/available-subjects'),
+  adminEnroll: (subjectId: string, studentId: string) =>
+    api.post<Enrollment>(`/enrollments/admin/subject/${subjectId}/student/${studentId}`),
+  adminUnenroll: (subjectId: string, studentId: string) =>
+    api.delete(`/enrollments/admin/subject/${subjectId}/student/${studentId}`),
+  bulkEnrollByYear: (subjectId: string, enrollmentYear: number) =>
+    api.post<{ enrolled: number }>(`/enrollments/admin/subject/${subjectId}/bulk-by-year`, {
+      enrollmentYear,
+    }),
+  bulkUnenrollByYear: (subjectId: string, enrollmentYear: number) =>
+    api.post<{ unenrolled: number }>(
+      `/enrollments/admin/subject/${subjectId}/bulk-unenroll-by-year`,
+      { enrollmentYear },
+    ),
 };

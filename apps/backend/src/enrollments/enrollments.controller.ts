@@ -4,6 +4,7 @@ import {
   Post,
   Delete,
   Param,
+  Body,
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -21,26 +22,60 @@ import { UserRole } from '@evidentiranje/shared';
 export class EnrollmentsController {
   constructor(private readonly enrollmentsService: EnrollmentsService) {}
 
-  @Post('subject/:subjectId')
-  @ApiOperation({ summary: 'Upis studenta na predmet' })
-  enroll(@Param('subjectId') subjectId: string, @GetUser() user: User) {
-    if (user.role !== UserRole.STUDENT) {
-      throw new UnauthorizedException('Samo studenti se mogu upisivati na predmete');
+  @Post('admin/subject/:subjectId/student/:studentId')
+  @ApiOperation({ summary: 'Admin upisuje studenta na predmet' })
+  adminEnroll(
+    @Param('subjectId') subjectId: string,
+    @Param('studentId') studentId: string,
+    @GetUser() user: User,
+  ) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new UnauthorizedException('Samo admin može upisivati studente');
     }
-    return this.enrollmentsService.enroll(user.id, subjectId);
+    return this.enrollmentsService.enroll(studentId, subjectId);
   }
 
-  @Delete('subject/:subjectId')
-  @ApiOperation({ summary: 'Odpis studenta sa predmeta' })
-  unenroll(@Param('subjectId') subjectId: string, @GetUser() user: User) {
-    if (user.role !== UserRole.STUDENT) {
-      throw new UnauthorizedException('Samo studenti se mogu odpisivati sa predmeta');
+  @Delete('admin/subject/:subjectId/student/:studentId')
+  @ApiOperation({ summary: 'Admin ispisuje studenta sa predmeta' })
+  adminUnenroll(
+    @Param('subjectId') subjectId: string,
+    @Param('studentId') studentId: string,
+    @GetUser() user: User,
+  ) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new UnauthorizedException('Samo admin može ispisivati studente');
     }
-    return this.enrollmentsService.unenroll(user.id, subjectId);
+    return this.enrollmentsService.unenroll(studentId, subjectId);
+  }
+
+  @Post('admin/subject/:subjectId/bulk-by-year')
+  @ApiOperation({ summary: 'Admin masovno upisuje studente po godini upisa' })
+  bulkEnrollByYear(
+    @Param('subjectId') subjectId: string,
+    @Body() body: { enrollmentYear: number },
+    @GetUser() user: User,
+  ) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new UnauthorizedException('Samo admin može masovno upisivati');
+    }
+    return this.enrollmentsService.bulkEnrollByYear(subjectId, body.enrollmentYear);
+  }
+
+  @Post('admin/subject/:subjectId/bulk-unenroll-by-year')
+  @ApiOperation({ summary: 'Admin masovno ispisuje studente po godini upisa' })
+  bulkUnenrollByYear(
+    @Param('subjectId') subjectId: string,
+    @Body() body: { enrollmentYear: number },
+    @GetUser() user: User,
+  ) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new UnauthorizedException('Samo admin može masovno ispisivati');
+    }
+    return this.enrollmentsService.bulkUnenrollByYear(subjectId, body.enrollmentYear);
   }
 
   @Get('my')
-  @ApiOperation({ summary: 'Moji upisani predmeti (studenti)' })
+  @ApiOperation({ summary: 'Moji upisani predmeti (studenti, samo pregled)' })
   getMyEnrollments(@GetUser() user: User) {
     if (user.role !== UserRole.STUDENT) {
       throw new UnauthorizedException('Samo studenti mogu videti svoje upise');
@@ -55,11 +90,5 @@ export class EnrollmentsController {
     @GetUser() user: User,
   ) {
     return this.enrollmentsService.getSubjectEnrollments(subjectId, user);
-  }
-
-  @Get('available-subjects')
-  @ApiOperation({ summary: 'Svi dostupni predmeti za upis' })
-  getAvailableSubjects() {
-    return this.enrollmentsService.getAllAvailableSubjects();
   }
 }

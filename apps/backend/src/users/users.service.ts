@@ -2,9 +2,11 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { User } from '../auth/entities/user.entity';
 import { UserRole } from '@evidentiranje/shared';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -18,7 +20,20 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const user = this.usersRepository.create(createUserDto);
+    const existing = await this.usersRepository.findOne({
+      where: { email: createUserDto.email },
+    });
+    if (existing) {
+      throw new ConflictException('Email već postoji');
+    }
+
+    const salt = await bcrypt.genSalt();
+    const hashedPassword = await bcrypt.hash(createUserDto.password, salt);
+
+    const user = this.usersRepository.create({
+      ...createUserDto,
+      password: hashedPassword,
+    });
     return this.usersRepository.save(user);
   }
 
@@ -27,14 +42,14 @@ export class UsersService {
       throw new UnauthorizedException('Samo admin može pristupiti svim korisnicima');
     }
     return this.usersRepository.find({
-      select: ['id', 'email', 'firstName', 'lastName', 'role', 'avatar', 'createdAt'],
+      select: ['id', 'email', 'firstName', 'lastName', 'indexNumber', 'enrollmentYear', 'role', 'avatar', 'createdAt'],
     });
   }
 
   async findOne(id: string, currentUser: User): Promise<User> {
     const user = await this.usersRepository.findOne({
       where: { id },
-      select: ['id', 'email', 'firstName', 'lastName', 'role', 'avatar', 'createdAt'],
+      select: ['id', 'email', 'firstName', 'lastName', 'indexNumber', 'enrollmentYear', 'role', 'avatar', 'createdAt'],
     });
 
     if (!user) {
@@ -61,7 +76,14 @@ export class UsersService {
       throw new UnauthorizedException('Samo admin može menjati uloge');
     }
 
-    Object.assign(user, updateUserDto);
+    const { password, ...rest } = updateUserDto;
+    Object.assign(user, rest);
+
+    if (password && password.trim() !== '') {
+      const salt = await bcrypt.genSalt();
+      user.password = await bcrypt.hash(password, salt);
+    }
+
     return this.usersRepository.save(user);
   }
 

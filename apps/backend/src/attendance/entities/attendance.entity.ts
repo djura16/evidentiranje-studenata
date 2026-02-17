@@ -4,11 +4,13 @@ import {
   Entity,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 import { User } from '../../auth/entities/user.entity';
 import { ClassSession } from '../../classes/entities/class-session.entity';
 
 @Entity()
+@Unique(['studentId', 'classSessionId'])
 export class Attendance {
   @PrimaryGeneratedColumn('uuid')
   id: string;

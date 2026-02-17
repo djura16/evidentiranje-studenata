@@ -90,6 +90,9 @@ const UserManagement: React.FC = () => {
                   Ime
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Indeks
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Email
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -111,6 +114,15 @@ const UserManagement: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900 dark:text-white">
                       {user.firstName} {user.lastName}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      {user.role === UserRole.STUDENT
+                        ? (user as any).enrollmentYear
+                          ? `${user.indexNumber || ''}/${(user as any).enrollmentYear}`
+                          : (user.indexNumber || '—')
+                        : '—'}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

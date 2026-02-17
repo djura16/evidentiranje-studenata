@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { getAndClearRedirectAfterLogin } from './utils/authStorage';
 import { useAuthContext } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout/Layout';
@@ -7,17 +8,20 @@ import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import UserManagement from './pages/Admin/UserManagement';
+import AdminSubjectsPage from './pages/Admin/AdminSubjectsPage';
 import TeacherDashboard from './pages/Teacher/TeacherDashboard';
 import SubjectsPage from './pages/Teacher/SubjectsPage';
 import ClassesPage from './pages/Teacher/ClassesPage';
 import ClassDetailPage from './pages/Teacher/ClassDetailPage';
 import AttendancePage from './pages/Teacher/AttendancePage';
+import TeacherCalendar from './pages/Teacher/TeacherCalendar';
 import StudentDashboard from './pages/Student/StudentDashboard';
 import StudentSubjects from './pages/Student/StudentSubjects';
 import EnrollmentsPage from './pages/Student/EnrollmentsPage';
 import StudentCalendar from './pages/Student/StudentCalendar';
 import StudentAttendance from './pages/Student/StudentAttendance';
 import QRScannerPage from './pages/Student/QRScannerPage';
+import QrDisplayFullscreenPage from './pages/Teacher/QrDisplayFullscreenPage';
 import LoadingSpinner from './components/LoadingSpinner';
 import { UserRole } from '@evidentiranje/shared';
 
@@ -42,7 +46,14 @@ function App() {
       <Route
         path="/login"
         element={
-          isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />
+          isAuthenticated ? (
+            <Navigate
+              to={getAndClearRedirectAfterLogin() || '/dashboard'}
+              replace
+            />
+          ) : (
+            <LoginPage />
+          )
         }
       />
       <Route
@@ -82,6 +93,14 @@ function App() {
             </ProtectedRoute>
           } 
         />
+        <Route 
+          path="admin/subjects" 
+          element={
+            <ProtectedRoute requiredRole={UserRole.ADMIN}>
+              <AdminSubjectsPage />
+            </ProtectedRoute>
+          } 
+        />
         
         {/* Teacher Routes */}
         <Route 
@@ -117,10 +136,26 @@ function App() {
           } 
         />
         <Route 
+          path="teacher/classes/:id/qr-display" 
+          element={
+            <ProtectedRoute requiredRole={UserRole.TEACHER}>
+              <QrDisplayFullscreenPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="teacher/attendance" 
           element={
             <ProtectedRoute requiredRole={UserRole.TEACHER}>
               <AttendancePage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="teacher/calendar" 
+          element={
+            <ProtectedRoute requiredRole={UserRole.TEACHER}>
+              <TeacherCalendar />
             </ProtectedRoute>
           } 
         />
@@ -163,14 +198,6 @@ function App() {
           element={
             <ProtectedRoute requiredRole={UserRole.STUDENT}>
               <StudentAttendance />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="student/scan" 
-          element={
-            <ProtectedRoute requiredRole={UserRole.STUDENT}>
-              <QRScannerPage />
             </ProtectedRoute>
           } 
         />

@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { ClassSession } from './entities/class-session.entity';
 import { Subject } from '../subjects/entities/subject.entity';
+import { SubjectTeacher } from '../subjects/entities/subject-teacher.entity';
 import { User } from '../auth/entities/user.entity';
 import { UserRole } from '@evidentiranje/shared';
 import { CreateClassSessionDto } from './dto/create-class-session.dto';
@@ -22,6 +23,8 @@ export class ClassesService {
     private classSessionsRepository: Repository<ClassSession>,
     @InjectRepository(Subject)
     private subjectsRepository: Repository<Subject>,
+    @InjectRepository(SubjectTeacher)
+    private subjectTeachersRepository: Repository<SubjectTeacher>,
     private configService: ConfigService,
   ) {}
 
@@ -37,10 +40,12 @@ export class ClassesService {
       throw new NotFoundException('Predmet nije pronađen');
     }
 
-    if (
-      currentUser.role !== UserRole.ADMIN &&
-      subject.teacherId !== currentUser.id
-    ) {
+    const isAssignedTeacher = await this.subjectTeachersRepository.findOne({
+      where: { subjectId: subject.id, teacherId: currentUser.id },
+    });
+    const isTeacher =
+      subject.teacherId === currentUser.id || !!isAssignedTeacher;
+    if (currentUser.role !== UserRole.ADMIN && !isTeacher) {
       throw new UnauthorizedException('Nemate pravo da kreirate čas za ovaj predmet');
     }
 
@@ -52,25 +57,82 @@ export class ClassesService {
     return this.classSessionsRepository.save(classSession);
   }
 
-  async findAll(currentUser: User, subjectId?: string): Promise<ClassSession[]> {
-    const where: any = {};
-    if (subjectId) {
-      where.subjectId = subjectId;
-    }
+  async findAll(
+    currentUser: User,
+    options?: {
+      subjectId?: string;
+      heldOnly?: boolean;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<ClassSession[]> {
+    const query = this.classSessionsRepository
+      .createQueryBuilder('cs')
+      .leftJoinAndSelect('cs.subject', 'subject')
+      .orderBy('cs.startTime', 'DESC');
 
     if (currentUser.role === UserRole.TEACHER) {
-      // Teachers see classes for their subjects
-      const subjects = await this.subjectsRepository.find({
-        where: { teacherId: currentUser.id },
-      });
-      where.subjectId = subjects.map((s) => s.id);
+      const teacherSubjects = await this.subjectsRepository
+        .createQueryBuilder('s')
+        .distinct(true)
+        .select('s.id')
+        .leftJoin('s.subjectTeachers', 'st')
+        .where('s.teacherId = :teacherId OR st.teacherId = :teacherId', {
+          teacherId: currentUser.id,
+        })
+        .getMany();
+      const subjectIds = teacherSubjects.map((s) => s.id);
+      if (subjectIds.length === 0) return [];
+      if (options?.subjectId) {
+        if (!subjectIds.includes(options.subjectId)) return [];
+        query.andWhere('cs.subjectId = :subjectId', { subjectId: options.subjectId });
+      } else {
+        query.andWhere('cs.subjectId IN (:...subjectIds)', { subjectIds });
+      }
+    } else if (options?.subjectId) {
+      query.andWhere('cs.subjectId = :subjectId', { subjectId: options.subjectId });
     }
 
-    return this.classSessionsRepository.find({
-      where,
-      relations: ['subject'],
-      order: { startTime: 'DESC' },
-    });
+    if (options?.heldOnly) {
+      query.andWhere('(cs.endTime <= :now OR cs.isActive = 1)', {
+        now: new Date(),
+      });
+    }
+
+    if (options?.limit != null) query.take(options.limit);
+    if (options?.offset != null) query.skip(options.offset);
+
+    return query.getMany();
+  }
+
+  async countHeld(currentUser: User, subjectId?: string): Promise<number> {
+    const query = this.classSessionsRepository
+      .createQueryBuilder('cs')
+      .where('(cs.endTime <= :now OR cs.isActive = 1)', { now: new Date() });
+
+    if (currentUser.role === UserRole.TEACHER) {
+      const teacherSubjects = await this.subjectsRepository
+        .createQueryBuilder('s')
+        .distinct(true)
+        .select('s.id')
+        .leftJoin('s.subjectTeachers', 'st')
+        .where('s.teacherId = :teacherId OR st.teacherId = :teacherId', {
+          teacherId: currentUser.id,
+        })
+        .getMany();
+      const subjectIds = teacherSubjects.map((s) => s.id);
+      if (subjectIds.length === 0) return 0;
+      if (subjectId) {
+        if (!subjectIds.includes(subjectId)) return 0;
+        query.andWhere('cs.subjectId = :subjectId', { subjectId });
+      } else {
+        query.andWhere('cs.subjectId IN (:...subjectIds)', { subjectIds });
+      }
+    } else if (subjectId) {
+      query.andWhere('cs.subjectId = :subjectId', { subjectId });
+    }
+
+    return query.getCount();
   }
 
   async findOne(id: string): Promise<ClassSession> {
@@ -81,6 +143,18 @@ export class ClassesService {
 
     if (!classSession) {
       throw new NotFoundException('Čas nije pronađen');
+    }
+
+    // Automatska deaktivacija kada QR kod istekne
+    if (
+      classSession.isActive &&
+      classSession.expiresAt &&
+      new Date() > new Date(classSession.expiresAt)
+    ) {
+      classSession.isActive = false;
+      classSession.qrCodeToken = null;
+      classSession.expiresAt = null;
+      return this.classSessionsRepository.save(classSession);
     }
 
     return classSession;
@@ -94,12 +168,15 @@ export class ClassesService {
     const classSession = await this.findOne(id);
     const subject = await this.subjectsRepository.findOne({
       where: { id: classSession.subjectId },
+      relations: ['subjectTeachers'],
     });
 
-    if (
-      currentUser.role !== UserRole.ADMIN &&
-      subject.teacherId !== currentUser.id
-    ) {
+    const isAssignedTeacher = subject.subjectTeachers?.some(
+      (st) => st.teacherId === currentUser.id,
+    );
+    const isTeacher = subject.teacherId === currentUser.id || isAssignedTeacher;
+
+    if (currentUser.role !== UserRole.ADMIN && !isTeacher) {
       throw new UnauthorizedException('Nemate pravo da menjate ovaj čas');
     }
 
@@ -111,12 +188,15 @@ export class ClassesService {
     const classSession = await this.findOne(id);
     const subject = await this.subjectsRepository.findOne({
       where: { id: classSession.subjectId },
+      relations: ['subjectTeachers'],
     });
 
-    if (
-      currentUser.role !== UserRole.ADMIN &&
-      subject.teacherId !== currentUser.id
-    ) {
+    const isAssignedTeacher = subject.subjectTeachers?.some(
+      (st) => st.teacherId === currentUser.id,
+    );
+    const isTeacher = subject.teacherId === currentUser.id || isAssignedTeacher;
+
+    if (currentUser.role !== UserRole.ADMIN && !isTeacher) {
       throw new UnauthorizedException('Nemate pravo da brišete ovaj čas');
     }
 
@@ -131,17 +211,38 @@ export class ClassesService {
     const classSession = await this.findOne(id);
     const subject = await this.subjectsRepository.findOne({
       where: { id: classSession.subjectId },
+      relations: ['subjectTeachers'],
     });
 
-    if (
-      currentUser.role !== UserRole.ADMIN &&
-      subject.teacherId !== currentUser.id
-    ) {
+    const isAssignedTeacher = subject.subjectTeachers?.some(
+      (st) => st.teacherId === currentUser.id,
+    );
+    const isTeacher = subject.teacherId === currentUser.id || isAssignedTeacher;
+
+    if (currentUser.role !== UserRole.ADMIN && !isTeacher) {
       throw new UnauthorizedException('Nemate pravo da aktivirate ovaj čas');
     }
 
     if (classSession.isActive) {
       throw new BadRequestException('Čas je već aktivan');
+    }
+
+    // Profesor može aktivirati samo ako je u vremenskom okviru: 15 min pre početka do kraja časa
+    const now = new Date();
+    const startTime = new Date(classSession.startTime);
+    const endTime = new Date(classSession.endTime);
+    const activationWindowStart = new Date(startTime);
+    activationWindowStart.setMinutes(activationWindowStart.getMinutes() - 15);
+
+    if (now < activationWindowStart) {
+      throw new BadRequestException(
+        'Ne možete aktivirati čas - još nije vreme. Možete aktivirati najranije 15 minuta pre početka časa.',
+      );
+    }
+    if (now > endTime) {
+      throw new BadRequestException(
+        'Ne možete aktivirati čas - vreme časa je već prošlo.',
+      );
     }
 
     // Generate QR code token
@@ -172,12 +273,15 @@ export class ClassesService {
     const classSession = await this.findOne(id);
     const subject = await this.subjectsRepository.findOne({
       where: { id: classSession.subjectId },
+      relations: ['subjectTeachers'],
     });
 
-    if (
-      currentUser.role !== UserRole.ADMIN &&
-      subject.teacherId !== currentUser.id
-    ) {
+    const isAssignedTeacher = subject.subjectTeachers?.some(
+      (st) => st.teacherId === currentUser.id,
+    );
+    const isTeacher = subject.teacherId === currentUser.id || isAssignedTeacher;
+
+    if (currentUser.role !== UserRole.ADMIN && !isTeacher) {
       throw new UnauthorizedException('Nemate pravo da deaktivirate ovaj čas');
     }
 

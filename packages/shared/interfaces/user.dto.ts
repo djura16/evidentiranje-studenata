@@ -5,6 +5,8 @@ export interface UserDTO {
   firstName: string;
   lastName: string;
   email: string;
+  indexNumber?: string;
+  enrollmentYear?: number;
   role: UserRole;
   avatar?: string;
   createdAt: Date | string; // Date from backend, string when serialized

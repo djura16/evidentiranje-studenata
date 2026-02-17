@@ -6,8 +6,8 @@ const Header: React.FC = () => {
 
   return (
     <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between px-6 py-4">
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
+      <div className="flex items-center justify-between pl-16 pr-6 py-4 lg:pl-6">
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-white truncate">
           Evidentiranje Studenata
         </h2>
         <button

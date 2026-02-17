@@ -2,12 +2,13 @@ import { Formik, Form, Field, ErrorMessage, FieldArray } from 'formik';
 import * as Yup from 'yup';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { subjectsApi, Subject } from '../../services/api';
+import { subjectsApi, Subject, User } from '../../services/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import { X, Plus, Trash2 } from 'lucide-react';
 
-interface SubjectModalProps {
+interface AdminSubjectModalProps {
   subject: Subject | null;
+  teachers: User[];
   onClose: () => void;
 }
 
@@ -43,6 +44,9 @@ const getAcademicYearOptions = () => {
 const subjectSchema = Yup.object().shape({
   name: Yup.string().required('Naziv predmeta je obavezan'),
   description: Yup.string(),
+  teacherIds: Yup.array()
+    .of(Yup.string().required())
+    .min(1, 'Bar jedan profesor mora biti dodeljen'),
   semesterType: Yup.string(),
   academicYearStart: Yup.number(),
   schedules: Yup.array().of(
@@ -55,13 +59,18 @@ const subjectSchema = Yup.object().shape({
   ),
 });
 
-const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
+const AdminSubjectModal: React.FC<AdminSubjectModalProps> = ({
+  subject,
+  teachers,
+  onClose,
+}) => {
   const { showNotification } = useNotification();
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
     mutationFn: subjectsApi.create,
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-subjects'] });
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       showNotification('Predmet uspešno kreiran', 'success');
@@ -79,6 +88,7 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
     mutationFn: ({ id, data }: { id: string; data: any }) =>
       subjectsApi.update(id, data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-subjects'] });
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
       showNotification('Predmet uspešno ažuriran', 'success');
       onClose();
@@ -92,6 +102,14 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
   });
 
   const isEditing = !!subject;
+
+  const initialTeacherIds = subject
+    ? ((subject.subjectTeachers?.length ?? 0) > 0
+        ? (subject.subjectTeachers ?? []).map((st) => st.teacherId)
+        : subject.teacherId
+          ? [subject.teacherId]
+          : [])
+    : [];
 
   const initialSchedules =
     subject?.schedules && subject.schedules.length > 0
@@ -117,7 +135,7 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full p-6 z-10 my-8"
+          className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full p-6 z-10 my-8 max-h-[90vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
@@ -135,6 +153,7 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
             initialValues={{
               name: subject?.name || '',
               description: subject?.description || '',
+              teacherIds: initialTeacherIds,
               semesterType: (subject as any)?.semesterType || 'winter',
               academicYearStart:
                 (subject as any)?.academicYearStart ?? getCurrentAcademicYearStart(),
@@ -149,13 +168,20 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                 (!values.semesterType || !values.academicYearStart)
               ) {
                 if (!values.semesterType) setFieldError('semesterType', 'Obavezno');
-                if (!values.academicYearStart) setFieldError('academicYearStart', 'Obavezno');
+                if (!values.academicYearStart)
+                  setFieldError('academicYearStart', 'Obavezno');
+                setSubmitting(false);
+                return;
+              }
+              if (!values.teacherIds?.length) {
+                setFieldError('teacherIds', 'Bar jedan profesor mora biti dodeljen');
                 setSubmitting(false);
                 return;
               }
               const payload: any = {
                 name: values.name,
                 description: values.description || undefined,
+                teacherIds: values.teacherIds,
               };
               if (
                 !isEditing &&
@@ -165,7 +191,10 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                 values.academicYearStart
               ) {
                 payload.semesterType = values.semesterType;
-                payload.academicYearStart = parseInt(String(values.academicYearStart), 10);
+                payload.academicYearStart = parseInt(
+                  String(values.academicYearStart),
+                  10,
+                );
                 payload.schedules = values.schedules.map((s) => ({
                   dayOfWeek: parseInt(String(s.dayOfWeek), 10),
                   startTime: s.startTime,
@@ -176,7 +205,11 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
               if (isEditing) {
                 updateMutation.mutate({
                   id: subject.id,
-                  data: { name: payload.name, description: payload.description },
+                  data: {
+                    name: payload.name,
+                    description: payload.description,
+                    teacherIds: payload.teacherIds,
+                  },
                 });
               } else {
                 createMutation.mutate(payload);
@@ -184,7 +217,7 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
               setSubmitting(false);
             }}
           >
-            {({ isSubmitting, values }) => (
+            {({ isSubmitting, values, setFieldValue }) => (
               <Form className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -214,6 +247,52 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Profesori (obavezno)
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {teachers.map((t) => {
+                      const isSelected = values.teacherIds?.includes(t.id);
+                      return (
+                        <label
+                          key={t.id}
+                          className={`inline-flex items-center px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'bg-blue-100 dark:bg-blue-900/50 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200'
+                              : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...(values.teacherIds || []), t.id]
+                                : (values.teacherIds || []).filter((id) => id !== t.id);
+                              setFieldValue('teacherIds', next);
+                            }}
+                            className="sr-only"
+                          />
+                          <span>
+                            {t.firstName} {t.lastName}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {teachers.length === 0 && (
+                      <p className="text-sm text-gray-500">
+                        Nema registrovanih profesora.
+                      </p>
+                    )}
+                  </div>
+                  <ErrorMessage
+                    name="teacherIds"
+                    component="div"
+                    className="text-red-500 text-sm mt-1"
+                  />
+                </div>
+
                 {!isEditing && (
                   <>
                     <div className="border-t border-gray-200 dark:border-gray-600 pt-4">
@@ -222,8 +301,7 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                       </h3>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                         Izaberite dane i vreme kada se održava predmet. Časovi
-                        će se automatski generisati za ceo semester (školska
-                        godina ima zimski i letnji semestar).
+                        će se automatski generisati za ceo semester.
                       </p>
 
                       <div className="space-y-4 mb-4">
@@ -243,11 +321,6 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                                 </option>
                               ))}
                             </Field>
-                            <ErrorMessage
-                              name="semesterType"
-                              component="div"
-                              className="text-red-500 text-sm mt-1"
-                            />
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -264,11 +337,6 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                                 </option>
                               ))}
                             </Field>
-                            <ErrorMessage
-                              name="academicYearStart"
-                              component="div"
-                              className="text-red-500 text-sm mt-1"
-                            />
                           </div>
                         </div>
 
@@ -313,7 +381,7 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                                     </div>
                                     <div>
                                       <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                                        Vreme (HH:mm)
+                                        Vreme
                                       </label>
                                       <Field
                                         type="time"
@@ -340,9 +408,7 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                                           name={`schedules.${index}.repeatsWeekly`}
                                           className="rounded"
                                         />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">
-                                          Svake nedelje
-                                        </span>
+                                        <span className="text-sm">Svake nedelje</span>
                                       </label>
                                     </div>
                                   </div>
@@ -361,7 +427,7 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                                 className="flex items-center space-x-2 text-blue-600 dark:text-blue-400 hover:underline"
                               >
                                 <Plus className="w-4 h-4" />
-                                <span>Dodaj još jedan termin</span>
+                                Dodaj termin
                               </button>
                             </>
                           )}
@@ -370,18 +436,12 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                     </div>
                   </>
                 )}
+
                 {isEditing && subject?.schedules && subject.schedules.length > 0 && (
                   <div className="text-sm text-gray-500 dark:text-gray-400">
                     <p className="font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Raspored (samo pregled):
                     </p>
-                    {((subject as any).semesterType || (subject as any).academicYearStart) && (
-                      <p className="mb-2">
-                        {(subject as any).semesterType === 'summer' ? 'Letnji' : 'Zimski'} semestar,
-                        školska godina {(subject as any).academicYearStart}/
-                        {(subject as any).academicYearStart + 1}
-                      </p>
-                    )}
                     {(subject as any).schedules.map((s: any, i: number) => (
                       <p key={i}>
                         {DAY_NAMES.find((d) => d.value === s.dayOfWeek)?.label}{' '}
@@ -395,14 +455,14 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
                   <button
                     type="button"
                     onClick={onClose}
-                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
                     Otkaži
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSubmitting
                       ? 'Sačuvaj...'
@@ -420,4 +480,4 @@ const SubjectModal: React.FC<SubjectModalProps> = ({ subject, onClose }) => {
   );
 };
 
-export default SubjectModal;
+export default AdminSubjectModal;

@@ -70,9 +70,16 @@ export class StatisticsService {
   }
 
   private async getTeacherDashboard(teacher: User) {
-    const subjects = await this.subjectsRepository.find({
-      where: { teacherId: teacher.id },
-    });
+    const subjects = await this.subjectsRepository
+      .createQueryBuilder('s')
+      .distinct(true)
+      .select('s.id', 'id')
+      .addSelect('s.name', 'name')
+      .leftJoin('s.subjectTeachers', 'st')
+      .where('s.teacherId = :teacherId OR st.teacherId = :teacherId', {
+        teacherId: teacher.id,
+      })
+      .getRawMany();
 
     const subjectIds = subjects.map((s) => s.id);
 

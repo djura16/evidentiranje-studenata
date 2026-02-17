@@ -24,7 +24,8 @@ const StudentSubjects: React.FC = () => {
 
       {subjects && subjects.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {subjects.map((subject) => (
+          {subjects.map((subject) =>
+            subject ? (
           <motion.div
             key={subject.id}
             initial={{ opacity: 0, scale: 0.9 }}
@@ -39,11 +40,15 @@ const StudentSubjects: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
                   {subject.name}
                 </h3>
-                {subject.teacher && (
+                {((subject.subjectTeachers?.length ?? 0) > 0 || subject.teacher) && (
                   <div className="flex items-center space-x-1 mt-1">
                     <User className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {subject.teacher.firstName} {subject.teacher.lastName}
+                      {(subject.subjectTeachers?.length ?? 0) > 0
+                        ? (subject.subjectTeachers ?? []).map((st: any) => st.teacher).filter(Boolean).map((t: any) => `${t.firstName} ${t.lastName}`).join(', ')
+                        : subject.teacher
+                          ? `${subject.teacher.firstName} ${subject.teacher.lastName}`
+                          : '—'}
                     </p>
                   </div>
                 )}
@@ -56,19 +61,13 @@ const StudentSubjects: React.FC = () => {
               </p>
             )}
           </motion.div>
-          ))}
+          ) : null
+          )}
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
           <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-            Niste upisani ni na jedan predmet. Idite na{' '}
-            <a
-              href="/student/enrollments"
-              className="text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              Upis na predmete
-            </a>{' '}
-            da se upišete.
+            Niste upisani ni na jedan predmet. Administrator vas može upisati na predmete.
           </p>
         </div>
       )}

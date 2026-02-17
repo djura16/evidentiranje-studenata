@@ -9,12 +9,12 @@ import { useMemo } from 'react';
 
 const localizer = momentLocalizer(moment);
 
-const minTime = new Date(2000, 0, 1, 7, 0, 0);  // 7:00 ujutru
-const maxTime = new Date(2000, 0, 1, 20, 0, 0); // 19:00 uveče (7 PM)
+const minTime = new Date(2000, 0, 1, 7, 0, 0);
+const maxTime = new Date(2000, 0, 1, 22, 0, 0);
 
-const StudentCalendar: React.FC = () => {
+const TeacherCalendar: React.FC = () => {
   const { data: classes, isLoading } = useQuery({
-    queryKey: ['classes'],
+    queryKey: ['teacher-classes-calendar'],
     queryFn: () => classesApi.getAll().then((res) => res.data),
   });
 
@@ -57,7 +57,7 @@ const StudentCalendar: React.FC = () => {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="bg-white dark:bg-blue-800 rounded-lg shadow-lg p-6 overflow-x-auto"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 overflow-x-auto"
         style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
       >
         <div className="min-w-[600px]">
@@ -92,7 +92,7 @@ const StudentCalendar: React.FC = () => {
             event: 'Događaj',
             noEventsInRange: 'Nema časova u ovom periodu',
           }}
-          culture='sr-RS'
+          culture="sr-RS"
           min={minTime}
           max={maxTime}
         />
@@ -102,4 +102,4 @@ const StudentCalendar: React.FC = () => {
   );
 };
 
-export default StudentCalendar;
+export default TeacherCalendar;
